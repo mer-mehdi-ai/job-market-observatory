@@ -3,8 +3,10 @@ import os
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+import logging 
 
-import requests 
+import requests
+
 
 #-------------------------------------------------------------------
 
@@ -53,9 +55,11 @@ def save_json(data,path):
 
 
 def fetch_jobs(company):
+    
     url = f"{BASE_URL}/{company}/jobs"
     response = requests.get(url, params={"content":"true"}, timeout=30)
     response.raise_for_status()
+    
     return response.json(), response.status_code
 
                             #____________________________________________________________________#
@@ -73,6 +77,8 @@ def wrap_payload(company,payload,status_code,fetched_at):
 
 def run(companies_path):
 
+    logger.info("Start Fetching Companies")
+
     companies = read_companies(companies_path)
 
     now = utc_now()
@@ -85,27 +91,46 @@ def run(companies_path):
 
     for company in companies:
         try:
+            start_fetching = time.monotonic()
             data, status = fetch_jobs(company)
+            duration_fetching = time.monotonic() - start_fetching
+
+            if len(data["jobs"]) == 0:
+                logger.warning(f"No jobs found in {company}")
+        
             path = build_path(company, date, timestamp)
             ensure_folder(path)
     
             informations= wrap_payload(company,data,status,timestamp)
             save_json(informations, path)
             total_jobs += len(data["jobs"])
+            logger.info(f"Company: {company} | Jobs: {len(data["jobs"])} | Fetch duration: {duration_fetching:.2f}s")
             succeeded.append(company)
         except Exception as e:
-            print(f"{company} failed: {e}")
+            logger.error(f"{company} failed: {e}", exc_info=True)
             failed.append(company)
         time.sleep(DELAY_SECONDS)
             
     if not succeeded :
         raise RuntimeError(f"All {len(failed)} companies failed : {failed}")
-    print(f"Companies: {len(companies)} | Succeeded: {len(succeeded)} | Failed: {len(failed)} | Jobs: {total_jobs} ")
+    logger.info(f"Companies: {len(companies)} | Succeeded: {len(succeeded)} | Failed: {len(failed)} | Jobs: {total_jobs} ")
 
     """print(f"{len(succeeded)} companies succeeded: {succeeded}")
     print(f"{len(failed)} companies failed: {failed}")
     print(f"there is {total_jobs} jobs in total")"""
 
+logger = logging.getLogger(__name__) # So the airflow could call it with the imported functions this why it is outside the guard 
+
 if __name__ == "__main__":
+    ensure_folder("logs/ingestion.log")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s: %(levelname)s, %(name)s, %(message)s",
+        handlers= [
+            logging.StreamHandler(),
+            logging.FileHandler("logs/ingestion.log", encoding="utf-8")
+        ]
+    )
 
     run(CONFIG_PATH)
+    
