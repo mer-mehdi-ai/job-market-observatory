@@ -12,7 +12,7 @@ import requests
 
 BASE_URL = "https://boards-api.greenhouse.io/v1/boards"
 SOURCE = "greenhouse"
-CONFIG_PATH = "config/companies_test.txt"
+CONFIG_PATH = "config/companies.txt"
 DELAY_SECONDS = 0.5
 
 #-------------------------------------------------------------------
@@ -84,6 +84,7 @@ def run(companies_path):
     now = utc_now()
     date = now.strftime("%Y-%m-%d")
     timestamp = now.strftime("%Y%m%dT%H%M%SZ")
+    fetched_at = now.isoformat()
 
     succeeded=[]
     failed=[]
@@ -101,7 +102,7 @@ def run(companies_path):
             path = build_path(company, date, timestamp)
             ensure_folder(path)
     
-            informations= wrap_payload(company,data,status,timestamp)
+            informations= wrap_payload(company,data,status, fetched_at)
             save_json(informations, path)
             total_jobs += len(data["jobs"])
             logger.info(f"Company: {company} | Jobs: {len(data["jobs"])} | Fetch duration: {duration_fetching:.2f}s")
@@ -115,6 +116,7 @@ def run(companies_path):
         raise RuntimeError(f"All {len(failed)} companies failed : {failed}")
     logger.info(f"Companies: {len(companies)} | Succeeded: {len(succeeded)} | Failed: {len(failed)} | Jobs: {total_jobs} ")
 
+    return succeeded, failed
     """print(f"{len(succeeded)} companies succeeded: {succeeded}")
     print(f"{len(failed)} companies failed: {failed}")
     print(f"there is {total_jobs} jobs in total")"""
@@ -132,5 +134,5 @@ if __name__ == "__main__":
         ]
     )
 
-    run(CONFIG_PATH)
+    successsful_companies, failed_companies = run(CONFIG_PATH)
     
